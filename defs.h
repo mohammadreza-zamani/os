@@ -9,6 +9,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct timeVariables;
 
 // bio.c
 void            binit(void);
@@ -120,6 +121,11 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int		          getChildren(int pid);
+int		          getCount(int input);
+int             changePolicy(int input);
+void            updateTimeVariables(void);
+int             waitForChild(struct timeVariables*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -163,6 +169,7 @@ void            timerinit(void);
 void            idtinit(void);
 extern uint     ticks;
 void            tvinit(void);
+uint            getTicks();
 extern struct spinlock tickslock;
 
 // uart.c

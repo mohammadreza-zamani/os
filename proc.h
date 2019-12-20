@@ -10,6 +10,16 @@ struct cpu {
   struct proc *proc;           // The process running on this cpu or null
 };
 
+struct timeVariables{
+  uint creationTime;
+  uint terminationTime;
+  uint sleepingTime;
+  int readyTime;
+  uint runningTime;
+};
+
+int getAlgorithmMode(void);
+
 extern struct cpu cpus[NCPU];
 extern int ncpu;
 
@@ -49,6 +59,14 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int numOfSysCalls[50];	// Count each Systrm Call in this process
+  int priority;               // priority can be 1 to 5
+  int calculatedPriority;
+  uint creationTime;
+  uint terminationTime;
+  uint sleepingTime;
+  int readyTime;
+  uint runningTime;
 };
 
 // Process memory is laid out contiguously, low addresses first:

@@ -14,11 +14,34 @@ struct {
 
 static struct proc *initproc;
 
+static int algorithmMode = 0;
+int getAlgorithmMode (){
+  return algorithmMode;
+}
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+
+void
+updateTimeVariables(void){
+  struct proc *p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if (p->state == RUNNING){
+      p->runningTime++;
+      if (p->readyTime == -1){
+        //it is the first time that this process Runs
+        p->readyTime = getTicks() - p->creationTime;
+      }
+    }
+    else if(p->state == SLEEPING){
+      p->sleepingTime++;
+    }
+  }
+  release(&ptable.lock);
+}
 
 void
 pinit(void)
@@ -38,10 +61,10 @@ struct cpu*
 mycpu(void)
 {
   int apicid, i;
-  
+
   if(readeflags()&FL_IF)
     panic("mycpu called with interrupts enabled\n");
-  
+
   apicid = lapicid();
   // APIC IDs are not guaranteed to be contiguous. Maybe we should have
   // a reverse map, or reserve a register to store &cpus[i].
@@ -74,10 +97,17 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
+  struct proc *p1;
   char *sp;
 
   acquire(&ptable.lock);
 
+
+  int numberOfUnused = 0;
+  for(p1 = ptable.proc; p1 < &ptable.proc[NPROC]; p1++){
+    if(p1->state == UNUSED)
+      numberOfUnused++;
+  }
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == UNUSED)
       goto found;
@@ -86,8 +116,23 @@ allocproc(void)
   return 0;
 
 found:
+
+  p->terminationTime = 0;
+  p->sleepingTime = 0;
+  p->readyTime = -1;
+  p->runningTime = 0;
+  p->creationTime = getTicks();
+
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->priority = 5;
+  p->calculatedPriority = 5;
+  if (numberOfUnused == 1){
+    p->calculatedPriority = 0;
+  }
+  for (int i = 0; i < 50; i++){
+    p->numOfSysCalls[i] = 0;
+  }
 
   release(&ptable.lock);
 
@@ -124,7 +169,7 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -247,8 +292,10 @@ exit(void)
   end_op();
   curproc->cwd = 0;
 
+
   acquire(&ptable.lock);
 
+  myproc()->terminationTime = getTicks();
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
 
@@ -260,6 +307,7 @@ exit(void)
         wakeup1(initproc);
     }
   }
+
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
@@ -275,7 +323,7 @@ wait(void)
   struct proc *p;
   int havekids, pid;
   struct proc *curproc = myproc();
-  
+
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for exited children.
@@ -311,6 +359,57 @@ wait(void)
   }
 }
 
+
+int
+waitForChild(struct timeVariables* tV){
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        if ((p->terminationTime - p->creationTime) < p->runningTime){
+          p->terminationTime = p->creationTime + p->runningTime;
+        }
+        tV->creationTime = p->creationTime;
+        tV->terminationTime = p->terminationTime;
+        tV->sleepingTime = p->sleepingTime;
+        tV->readyTime = p->readyTime;
+        tV->runningTime = p->runningTime;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -323,9 +422,10 @@ void
 scheduler(void)
 {
   struct proc *p;
+  struct proc *p1;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -333,12 +433,25 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+      if(p->state != RUNNABLE){
         continue;
+      }
+      // if we want Modiﬁed Priority Scheduling
+      if (algorithmMode == 2) {
+        for(p1 = ptable.proc; p1 < &ptable.proc[NPROC]; p1++ ){
+          if(p1->state != RUNNABLE){
+            continue;
+          }
+          if (p->calculatedPriority > p1->calculatedPriority){
+            p = p1;
+          }
+        }
+      }
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -386,6 +499,7 @@ void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
+  myproc()->calculatedPriority += myproc()->priority; // update calculatedPriority
   myproc()->state = RUNNABLE;
   sched();
   release(&ptable.lock);
@@ -418,7 +532,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   if(p == 0)
     panic("sleep");
 
@@ -531,4 +645,60 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int getChildren(int pid){
+  struct proc *p;
+  int total = 0;
+
+  acquire(&ptable.lock);
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+
+     if(p->state != UNUSED && p->parent->pid == pid){
+        if (p->pid < 10){
+          total = total*10 + p->pid;
+        }
+        else if (p->pid > 9 && p->pid < 100){
+          total = total*100 + p->pid;
+        }
+     }
+  }
+
+  release(&ptable.lock);
+
+ return total;
+}
+
+// Count repetition of a system call
+int getCount(int input){
+  struct proc *p;
+  int total = 0;
+
+  acquire(&ptable.lock);
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+
+     if(p->pid == myproc()->pid){
+        total = p->numOfSysCalls[input];
+     }
+  }
+
+  release(&ptable.lock);
+
+ return total;
+}
+
+
+int changePolicy(int input){
+  if (input > 2 || input < 0){
+    return -1;
+  }
+  algorithmMode = input;
+  if (algorithmMode != input){
+    return -1;
+  }
+  return 1;
 }

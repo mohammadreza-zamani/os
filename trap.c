@@ -26,6 +26,14 @@ tvinit(void)
   initlock(&tickslock, "time");
 }
 
+uint getTicks(){
+  uint out;
+  acquire(&tickslock);
+  out = ticks;
+  release(&tickslock);
+  return out;
+}
+
 void
 idtinit(void)
 {
@@ -94,6 +102,11 @@ trap(struct trapframe *tf)
     myproc()->killed = 1;
   }
 
+
+  //update timeVariables
+  updateTimeVariables();
+
+
   // Force process exit if it has been killed and is in user space.
   // (If it is still executing in the kernel, let it keep running
   // until it gets to the regular system call return.)
@@ -102,9 +115,19 @@ trap(struct trapframe *tf)
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
+  // check QUANTUM
+
   if(myproc() && myproc()->state == RUNNING &&
-     tf->trapno == T_IRQ0+IRQ_TIMER)
-    yield();
+     tf->trapno == T_IRQ0+IRQ_TIMER){
+    if (getAlgorithmMode() == 0 || getAlgorithmMode() == 2) {
+      //XV6 original algorithm and priority type
+      yield();
+    }
+    else if(ticks % QUANTUM == 0){
+      //Modiﬁed XV6 Original Algorithm
+      yield();
+    }
+  }
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)

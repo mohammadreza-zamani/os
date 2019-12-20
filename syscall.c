@@ -60,7 +60,7 @@ argptr(int n, char **pp, int size)
 {
   int i;
   struct proc *curproc = myproc();
- 
+
   if(argint(n, &i) < 0)
     return -1;
   if(size < 0 || (uint)i >= curproc->sz || (uint)i+size > curproc->sz)
@@ -103,6 +103,13 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
+extern int sys_getyear(void);
+extern int sys_getppid(void);
+extern int sys_getChildren(void);
+extern int sys_getCount(void);
+extern int sys_changePriority(void);
+extern int sys_changePolicy(void);
+extern int sys_waitForChild(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -126,6 +133,13 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_getyear] sys_getyear,
+[SYS_getppid] sys_getppid,
+[SYS_getChildren] sys_getChildren,
+[SYS_getCount] sys_getCount,
+[SYS_changePriority] sys_changePriority,
+[SYS_changePolicy] sys_changePolicy,
+[SYS_waitForChild] sys_waitForChild,
 };
 
 void
@@ -135,6 +149,9 @@ syscall(void)
   struct proc *curproc = myproc();
 
   num = curproc->tf->eax;
+  //cprintf("internal - %d --pid %d num %d %s\n", curproc->pid, curproc->numOfSysCalls[num], num, curproc->name);
+  curproc->numOfSysCalls[num] += 1; // add number of each system call
+
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     curproc->tf->eax = syscalls[num]();
   } else {

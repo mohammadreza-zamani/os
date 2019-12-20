@@ -89,3 +89,73 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+//just for test system call
+int
+sys_getyear(void)
+{
+return 1975;
+}
+
+//get ppid
+int
+sys_getppid(void){
+
+  return myproc()->parent->pid;
+
+}
+
+int
+sys_getChildren(void)
+{
+  int pid;
+
+  if(argint(0, &pid) < 0)
+    return -1;
+
+  return getChildren(pid);
+}
+
+int
+sys_getCount(void){
+  int input;
+
+  if(argint(0, &input) < 0)
+    return -1;
+
+  return getCount(input);
+}
+
+int
+sys_changePriority(void){
+  int input;
+
+  if(argint(0, &input) < 0)
+    return -1;
+  if (input > 5 || input < 1) {
+    return -1;
+  }
+  //cprintf("%d\n",myproc()->priority);
+  myproc()->priority = input;
+  //cprintf("%d\n",myproc()->priority);
+  return 1;
+}
+
+int
+sys_changePolicy(void){
+  int input;
+
+  if(argint(0, &input) < 0)
+    return -1;
+
+  return changePolicy(input);
+}
+
+int
+sys_waitForChild(void){
+  struct timeVariables *tv;
+  if (argptr(0, (void*)&tv, sizeof(*tv)) < 0){
+    return -1;
+  }
+  return waitForChild(tv);
+}
