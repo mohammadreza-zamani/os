@@ -9,6 +9,9 @@
 
 struct {
   struct spinlock lock;
+  struct Ticketlock Tlock;
+  struct rwlock rwlock;
+  int sharedCounter;
   struct proc proc[NPROC];
 } ptable;
 
@@ -49,6 +52,35 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
+void
+ticketlockInit()
+{
+  initTicketlock(&ptable.Tlock, "ptable");
+}
+
+void
+rwinitProc(void){
+  initrwlock(&ptable.rwlock, "ptable");
+}
+
+int
+rwtestProc(int input){
+
+  int a;
+  if (input == 0){
+      acquirerwlock(&ptable.rwlock, 0);
+      a = ptable.sharedCounter;
+      releaserwlock(&ptable.rwlock, 0);
+
+  }else{
+      acquirerwlock(&ptable.rwlock, 1);
+      ptable.sharedCounter = ptable.sharedCounter + 1;
+      a = ptable.sharedCounter;
+      releaserwlock(&ptable.rwlock, 1);
+      
+  }
+  return a;
+}
 // Must be called with interrupts disabled
 int
 cpuid() {
@@ -122,6 +154,7 @@ found:
   p->readyTime = -1;
   p->runningTime = 0;
   p->creationTime = getTicks();
+  p->ticket = 0;
 
   p->state = EMBRYO;
   p->pid = nextpid++;
@@ -701,4 +734,10 @@ int changePolicy(int input){
     return -1;
   }
   return 1;
+}
+
+int returnTicketValue(){
+  acquireTicketlock(&ptable.Tlock);
+  releaseTicketlock(&ptable.Tlock);
+  return ((&ptable.Tlock)->locked);
 }

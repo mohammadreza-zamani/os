@@ -27,3 +27,7 @@
 #define SYS_changePriority  26
 #define SYS_changePolicy    27
 #define SYS_waitForChild    28
+#define SYS_ticketlockInit  29
+#define SYS_ticketlockTest  30
+#define SYS_rwinit          31
+#define SYS_rwtest          32

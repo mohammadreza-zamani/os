@@ -6,10 +6,12 @@ struct pipe;
 struct proc;
 struct rtcdate;
 struct spinlock;
+struct Ticketlock;
 struct sleeplock;
 struct stat;
 struct superblock;
 struct timeVariables;
+struct rwlock;
 
 // bio.c
 void            binit(void);
@@ -112,6 +114,7 @@ int             kill(int);
 struct cpu*     mycpu(void);
 struct proc*    myproc();
 void            pinit(void);
+void            ticketlockInit(void);
 void            procdump(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
@@ -126,16 +129,25 @@ int		          getCount(int input);
 int             changePolicy(int input);
 void            updateTimeVariables(void);
 int             waitForChild(struct timeVariables*);
+int             returnTicketValue();
+void            rwinitProc();
+int             rwtestProc(int input);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
 
 // spinlock.c
 void            acquire(struct spinlock*);
+void            acquireTicketlock(struct Ticketlock *lk);
+void            acquirerwlock(struct rwlock *lk, int type);
 void            getcallerpcs(void*, uint*);
 int             holding(struct spinlock*);
 void            initlock(struct spinlock*, char*);
+void            initTicketlock(struct Ticketlock*, char*);
+void            initrwlock(struct rwlock *lk, char *name);
 void            release(struct spinlock*);
+void            releaseTicketlock(struct Ticketlock *lk);
+void            releaserwlock(struct rwlock *lk, int type);
 void            pushcli(void);
 void            popcli(void);
 

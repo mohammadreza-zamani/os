@@ -17,6 +17,62 @@ initlock(struct spinlock *lk, char *name)
   lk->cpu = 0;
 }
 
+void
+initTicketlock(struct Ticketlock *lk, char *name)
+{
+  lk->name = name;
+  lk->locked = 0;
+  lk->q = 0;
+  lk->cpu = 0;
+}
+
+void
+initrwlock(struct rwlock *lk, char *name)
+{
+  lk->name = name;
+  lk->readersIn = 0;
+  lk->readersOut = 0;
+  lk->lockedW = 0;
+  lk->cpu = 0;
+}
+
+void
+acquirerwlock(struct rwlock *lk, int type){
+  pushcli(); // disable interrupts to avoid deadlock.
+  if (type == 0){
+    while(lk->lockedW == 1);
+    fetch_and_add(&lk->readersIn, 1);
+  }else if(type == 1){
+    while(lk->lockedW == 1);
+    xchg(&lk->lockedW, 1);
+    while(lk->readersOut < lk->readersIn);
+  }
+
+  __sync_synchronize();
+
+  // Record info about lock acquisition for debugging.
+  lk->cpu = mycpu();
+  getcallerpcs(&lk, lk->pcs);
+}
+
+void
+acquireTicketlock(struct Ticketlock *lk){
+  pushcli(); // disable interrupts to avoid deadlock.
+  //if(holding(lk))
+  //  panic("acquire");
+
+
+  myproc()->ticket = lk->q;
+  while (lk->locked < myproc()->ticket);
+
+  __sync_synchronize();
+
+  fetch_and_add(&lk->q, 1);
+  lk->cpu = mycpu();
+  getcallerpcs(&lk, lk->pcs);
+
+
+}
 // Acquire the lock.
 // Loops (spins) until the lock is acquired.
 // Holding a lock for a long time may cause
@@ -40,6 +96,35 @@ acquire(struct spinlock *lk)
   // Record info about lock acquisition for debugging.
   lk->cpu = mycpu();
   getcallerpcs(&lk, lk->pcs);
+}
+
+void
+releaserwlock(struct rwlock *lk, int type){
+  lk->pcs[0] = 0;
+  lk->cpu = 0;
+
+  __sync_synchronize();
+  if(type == 0){
+    fetch_and_add(&lk->readersOut, 1);
+  }else if(type == 1){
+    xchg(&lk->lockedW, 0);
+  }
+  popcli();
+}
+
+void
+releaseTicketlock(struct Ticketlock *lk){
+  //if(!holding(lk))
+  //  panic("release");
+
+  lk->pcs[0] = 0;
+  lk->cpu = 0;
+
+
+  __sync_synchronize();
+
+  fetch_and_add(&lk->locked, 1);
+  popcli();
 }
 
 // Release the lock.
@@ -123,4 +208,3 @@ popcli(void)
   if(mycpu()->ncli == 0 && mycpu()->intena)
     sti();
 }
-

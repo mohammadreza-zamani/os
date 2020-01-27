@@ -159,3 +159,31 @@ sys_waitForChild(void){
   }
   return waitForChild(tv);
 }
+
+int
+sys_ticketlockInit(void){
+  ticketlockInit();
+  return 1;
+}
+
+int
+sys_ticketlockTest(void){
+
+  return returnTicketValue();
+}
+
+int
+sys_rwinit(void){
+  rwinitProc();
+  return 0;
+}
+
+int
+sys_rwtest(void){
+  int input;
+
+  if(argint(0, &input) < 0)
+    return -1;
+
+  return rwtestProc(input);
+}
